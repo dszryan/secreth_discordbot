@@ -12,14 +12,14 @@ import Commands
 
 # Enable logging
 log.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                level=log.DEBUG,
+                level=log.INFO,
                 filename='../logs/logging.log')
 
 logger = log.getLogger(__name__)
 
 ch = log.StreamHandler(sys.stdout)
 ch.setFormatter(log.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-ch.setLevel(log.DEBUG)
+ch.setLevel(log.INFO)
 logger.addHandler(ch)
 
 games = {}
@@ -47,7 +47,7 @@ async def on_message(msg):
     msg_content = msg.content.strip()
 
     # Only care about messages that start with prefix
-    if not msg_content.startswith(PREFIX):
+    if not msg_content.lower().startswith(PREFIX):
         return
 
     # Bot won't take commands from itself

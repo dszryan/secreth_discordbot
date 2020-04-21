@@ -1,4 +1,5 @@
 from main import games, log
+import asyncio
 
 from discord.abc import PrivateChannel
 import discord
@@ -69,7 +70,7 @@ async def command_start(bot, msg, args):
 
 async def command_rules(bot, msg, args):
     """Sends a link to the official Secret Hitler rules."""
-    await msg.channel.send(discord.Embed(title="Read the official Secret Hitler rules", description="http://www.secrethitler.com/assets/Secret_Hitler_Rules.pdf"))
+    await msg.channel.send(embed=discord.Embed(title="Read the official Secret Hitler rules", description="http://www.secrethitler.com/assets/Secret_Hitler_Rules.pdf"))
 
 
 # pings the bot
@@ -81,12 +82,12 @@ async def command_ping(bot, msg, args):
 
     diff = round((t2 - t1) * 1000, 2)
 
-    await pong_msg.edit(':ping_pong: Pong **{} ms**'.format(diff))
+    await pong_msg.edit(content=':ping_pong: Pong **{} ms**'.format(diff))
 
 
 async def command_invite(bot, msg, args):
     """Sends a link to add the bot to another server."""
-    em = discord.Embed(type="rich", title="Invite Secret Hitler Bot to a Server", description="https://discordapp.com/oauth2/authorize?client_id=331945702173179904&scope=bot", color=embed_color)
+    em = discord.Embed(type="rich", title="Invite Secret Hitler Bot to a Server", description="https://discordapp.com/api/oauth2/authorize?client_id=702048291780558870&permissions=67631168&scope=bot", color=embed_color)
     await msg.channel.send(embed=em)
 
 
@@ -127,7 +128,7 @@ async def command_help(bot, msg, args):
 
 async def command_about(bot, msg, args):
     """Information about the bot's authors and licensing."""
-    await msg.channel.send(embed=generate_embed("This bot was originally developed for the chat client Telegram by Julian Schrittwieser.\n\nThis version has been adapted to Discord by James Shiffer, and uses the library discord.py.\nView the source code here: https://github.com/scoliono/secreth_telegrambot/tree/discord\n\nCopyright and license Secret Hitler (© 2016 GOAT, WOLF, & CABBAGE) is designed by Max Temkin (Cards Against Humanity, Humans vs. Zombies) Mike Boxleiter (Solipskier, TouchTone), Tommy Maranges (Philosophy Bro) and illustrated by Mackenzie Schubert (Letter Tycoon, Penny Press). Secret Hitler is licensed under Creative Commons BY-NC-SA 4.0 and so is this bot.", "About Secret Hitler Bot"))
+    await msg.channel.send(embed=generate_embed("This bot was originally developed for the chat client Telegram by Julian Schrittwieser.\n\nThis version has been adapted to Discord by James Shiffer, and uses the library discord.py. dszryan and Ng Oon-Ee updated it to discord.py 1.3.2.\nView the source code here: https://github.com/ngoonee/secreth_telegrambot/tree/discord\n\nCopyright and license Secret Hitler (© 2016 GOAT, WOLF, & CABBAGE) is designed by Max Temkin (Cards Against Humanity, Humans vs. Zombies) Mike Boxleiter (Solipskier, TouchTone), Tommy Maranges (Philosophy Bro) and illustrated by Mackenzie Schubert (Letter Tycoon, Penny Press). Secret Hitler is licensed under Creative Commons BY-NC-SA 4.0 and so is this bot.", "About Secret Hitler Bot"))
 
 
 # shutdown, only ADMIN
@@ -199,7 +200,7 @@ async def command_join(bot, msg, args):
                                              "You joined a game in %s. I will soon tell you your secret role." % group_name)
                             game.add_player(uid, player)
                             if len(game.playerlist) > 4:
-                                await game.channel(
+                                await game.channel.send(
                                                  fname + " has joined the game. Type sh?startgame if this was the last player and you want to start with %d players!" % len(
                                                      game.playerlist))
                             else:
@@ -208,10 +209,10 @@ async def command_join(bot, msg, args):
                                                      "%s has joined the game. There is currently 1 player in the game and you need 5-10 players." % (
                                                          fname))
                                 else:
-                                    await game.channel(
+                                    await game.channel.send(
                                                      "%s has joined the game. There are currently %d players in the game and you need 5-10 players." % (
                                                          fname, len(game.playerlist)))
-                        except Exception:
+                        except Exception as e:
                             await game.channel.send(
                                              fname + ", I can\'t send you a DM. Please try sending sh?join again.")
                     else:
@@ -240,7 +241,7 @@ async def command_startgame(bot, msg, args):
                 player_number = len(game.playerlist)
                 if player_number > 4:
                     # Tell people their roles and such
-                    await inform_players(bot, game, game.channel.id, player_number)
+                    await inform_players(bot, game, player_number)
                     await inform_fascists(bot, game, player_number)
                     game.board = Board(player_number, game)
                     game.shuffle_player_sequence()
@@ -302,61 +303,70 @@ async def choose_chancellor(bot, game):
         pres_uid = game.board.state.president.user.id
     if game.board.state.chancellor is not None:
         chan_uid = game.board.state.chancellor.user.id
+    log.info('currently president: {} and chancellor: {}'.format(game.board.state.president, game.board.state.chancellor))
     for uid in game.playerlist:
         # If there are only five players left in the
         # game, only the last elected Chancellor is
         # ineligible to be Chancellor Candidate; the
         # last President may be nominated.
-        if monotonic() > game.playerlist[uid].last_input + 20:
-            game.playerlist[uid].is_dead = True
+
+        # This is intended to kill off AFK players, but effectively kills all games since the last_input is never reset...
+        #if monotonic() > game.playerlist[uid].last_input + 20:
+            #game.playerlist[uid].is_dead = True
         if len(game.player_sequence) > 5:
             if uid != game.board.state.nominated_president.user.id and game.playerlist[
                 uid].is_dead == False and uid != pres_uid and uid != chan_uid:
                 name = game.playerlist[uid].name
-                btns.append(name)
+                btns.append({'name': name, 'uid': uid})
         else:
             if uid != game.board.state.nominated_president.user.id and game.playerlist[
                 uid].is_dead == False and uid != chan_uid:
                 name = game.playerlist[uid].name
-                btns.append(name)
+                btns.append({'name': name, 'uid': uid})
 
-    await game.board.state.nominated_president.send(game.board.print_board())
-    await game.board.state.nominated_president.send('Please nominate your chancellor with sh?chan <id>!\nYour choices are:\n{}\n\nYou have 30 seconds.'.format("["+ str(i) +"] " + p for i, p in enumerate(btns)))
-
-    chan_num = None
+    await game.board.state.nominated_president.user.send(game.board.print_board())
+    await game.board.state.nominated_president.user.send('Please nominate your chancellor with sh?chan <id>!\nYour choices are:\n{}\n\nYou have 30 seconds.'
+                                                         .format(
+                                                             "\n".join(
+                                                                 "["+ str(i+1) +"] " + p['name'] for i, p in enumerate(btns)
+                                                                 )
+                                                         )
+    )
 
     def check_chancellor(msg):
-        global chan_num
-
-        msg_content = msg.content.strip()
-        if not msg_content.startsWith(PREFIX):
+        if not msg.author==game.board.state.nominated_president.user:
             return False
-
-        cmd, *args = msg_content.split()
-        cmd = cmd[len(PREFIX):].lower().strip()
-
+        validation = validate_message(msg)
+        if not validation:
+            return False
+        cmd, arg = validation
         if not cmd == "chan":
             return False
-
         try:
-            if not int(args[0]) > 0 or not int(args[0]) <= len(game.playerlist):
+            if not int(arg) > 0 or not int(arg) <= len(btns):
                 return False
         except Exception:
             return False
-
-        chan_num = int(args[0])
         return True
 
-
     # Pick a random chancellor if they don't pick within 30 seconds
-    chan_msg = await bot.wait_for_message(author=game.board.state.nominated_president, check=check_chancellor, timeout=30)
-    await nominate_chosen_chancellor(bot, game.channel.id, game.playerlist.keys()[int(chan_num) - 1] if chan_msg else random.choice(game.playerlist.keys()))
+    try:
+        msg = await bot.wait_for('message', check=check_chancellor, timeout=game.timeout)
+        cmd, arg = validate_message(msg)
+        chan_num = int(arg)
+    except asyncio.TimeoutError:
+        log.info('choose_chancellor timed out - random chancellor chosen')
+        chan_num = random.choice([i for i, p in enumerate(btns)])
+    await nominate_chosen_chancellor(bot,
+                                     game,
+                                     btns[chan_num-1]['uid'] if chan_num else random.choice(list(game.playerlist.keys()))
+    )
 
 
-async def nominate_chosen_chancellor(bot, cid, chosen_uid):
+async def nominate_chosen_chancellor(bot, game, chosen_uid):
     log.info('nominate_chosen_chancellor called')
     try:
-        game = games[cid]
+        #game = games[cid]
         game.board.state.nominated_chancellor = game.playerlist[chosen_uid]
         log.info("President %s (%d) nominated %s (%d)" % (
             game.board.state.nominated_president.name, game.board.state.nominated_president.user.id,
@@ -374,49 +384,51 @@ async def nominate_chosen_chancellor(bot, cid, chosen_uid):
 
 async def vote(bot, game):
     log.info('vote called')
+    voted_msg = await game.channel.send(embed=discord.Embed(title="Voted:", description="*Nobody has voted*"))
     for uid in game.playerlist:
-        if monotonic() > game.playerlist[uid].last_input + 20:
-            game.playerlist[uid].is_dead = True
+        log.info('voting instructions sent to {}'.format(game.playerlist[uid].user.name))
+        # This is intended to kill off AFK players, but effectively kills all games since the last_input is never reset...
+        #if monotonic() > game.playerlist[uid].last_input + 20:
+            #game.playerlist[uid].is_dead = True
         if not game.playerlist[uid].is_dead:
-            await game.channel.send('Awaiting {}\'s vote...'.format(game.playerlist[uid].name))
             if game.playerlist[uid] is not game.board.state.nominated_president:
                 # the nominated president already got the board before nominating a chancellor
                 await game.playerlist[uid].user.send(game.board.print_board())
             await game.playerlist[uid].user.send(
                              "Do you want to elect President %s and Chancellor %s? Say sh?ja or sh?nein to continue. You have 30 seconds." % (
                                  game.board.state.nominated_president.name, game.board.state.nominated_chancellor.name))
-
-            vote = None
-            def check_vote(msg):
-                global vote
-
-                msg_content = msg.content.strip()
-                if not msg_content.startsWith(PREFIX):
-                    return False
-
-                cmd, *args = msg_content.split()
-                cmd = cmd[len(PREFIX):].lower().strip()
-
-                if cmd == "ja":
-                    vote = True
-                elif cmd == "nein":
-                    vote = False
-                else:
-                    return False
-
+    while True:
+        def check_vote(msg):
+            validation = validate_message(msg)
+            if not validation:
+                return False
+            cmd, _ = validation
+            if cmd in ("ja", "nein"):
                 return True
-
-            voted_msg = await game.channel.send(embed=discord.Embed(title="Voted:", description="*Nobody has voted*"))
-
-            await bot.wait_for_message(author=game.playerlist[uid], check=check_vote, timeout=30)
-            await handle_voting(bot, game, game.playerlist[uid], vote if vote else True, voted_msg)
+            else:
+                return False
+        try:
+            msg = await bot.wait_for('message', check=check_vote, timeout=game.timeout)
+            cmd, _ = validate_message(msg)
+            vote = True if cmd == "ja" else False
+            uid = msg.author.id
+        except asyncio.TimeoutError:
+            log.info('timeout while waiting for player votes, {} remaining'.format(
+                len(game.player_sequence)- len(game.board.state.last_votes))
+            )
+            continue
+        last_vote = await handle_voting(bot, game, game.playerlist[uid], vote, voted_msg)
+        if last_vote:
+            log.info('last vote received, voting closes.')
+            break
+    await count_votes(bot, game)
 
 
 async def handle_voting(bot, game, player, vote, voted_msg):
     try:
         answer = "Ja" if vote else "Nein"
 
-        await player.user.send("Thank you for your vote: %s to a President %s and a Chancellor %s" % (vote, game.board.state.nominated_president.name, game.board.state.nominated_chancellor.name))
+        await player.user.send("Thank you for your vote: %s to a President %s and a Chancellor %s" % (answer, game.board.state.nominated_president.name, game.board.state.nominated_chancellor.name))
 
         await voted_msg.edit(embed=discord.Embed(title="Voted:", description=voted_msg.embeds[0].description + "\n- " + player.name if not voted_msg.embeds[0].description == "*Nobody has voted*" else "- " + player.name))
 
@@ -424,7 +436,8 @@ async def handle_voting(bot, game, player, vote, voted_msg):
         if player.user.id not in game.board.state.last_votes:
             game.board.state.last_votes[player.user.id] = answer
         if len(game.board.state.last_votes) == len(game.player_sequence):
-            await count_votes(bot, game)
+            return True
+        return False
     except:
         log.error("handle_voting: Game or board should not be None!")
 
@@ -486,45 +499,45 @@ async def draw_policies(bot, game):
     log.info('draw_policies called')
     game.board.state.veto_refused = False
     # shuffle discard pile with rest if rest < 3
-    shuffle_policy_pile(bot, game)
+    await shuffle_policy_pile(bot, game)
     for i in range(3):
         game.board.state.drawn_policies.append(game.board.policies.pop(0))
 
-    discarded = None
     def check_discard(msg):
-        msg_content = msg.content.strip()
-        if not msg_content.startsWith(PREFIX):
+        if not msg.author==game.board.state.president.user:
             return False
-
-        cmd, *args = msg_content.split()
-        cmd = cmd[len(PREFIX):].lower().strip()
-
+        validation = validate_message(msg)
+        if not validation:
+            return False
+        cmd, arg = validation
         if not cmd == "discard":
             return False
-
         try:
-            discarded = int( args[0] )
+            discarded = int(arg)
             if not discarded > 0 or not discarded <= 3:
                 return False
         except Exception:
             return False
-
         return True
 
     policy_str = ""
     for i, p in enumerate(game.board.state.drawn_policies):
-        policy_str += ("[" + str(i) + "] " + p + "\n")
+        policy_str += ("[" + str(i+1) + "] " + p + "\n")
 
-    await game.board.state.president.user.send("You drew the following 3 policies: {}\nWhich one do you want to discard? Use sh?discard <id>.".format(policy_str))
-    await bot.wait_for_message(author=game.board.state.president.user, check=check_discard, timeout=30)
+    await game.board.state.president.user.send("You drew the following 3 policies:\n{}\nWhich one do you want to discard? Use sh?discard <id>.".format(policy_str))
+    try:
+        msg = await bot.wait_for('message', check=check_discard, timeout=game.timeout)
+        _, arg = validate_message(msg)
+        discarded = int(arg)
+    except asyncio.TimeoutError:
+        log.info('draw_policies timed out - random policy discarded')
+        discarded = random.randrange(1, 4)
 
-    await choose_policy(bot, game, game.board.state.drawn_policies[discarded-1] if discarded else random.choice(game.board.state.drawn_policies))
+    await choose_policy(bot, game, game.board.state.drawn_policies[discarded-1])
 
 async def choose_policy(bot, game, answer):
     log.info('choose_policy called')
-    cid = game.channel.id
     try:
-        game = games[cid]
         pres = game.board.state.president
         if len(game.board.state.drawn_policies) == 3:
             log.info("Player %s (%d) discarded %s" % (pres.name, pres.user.id, answer))
@@ -538,41 +551,39 @@ async def choose_policy(bot, game, answer):
         elif len(game.board.state.drawn_policies) == 2:
             if answer == "veto":
                 log.info("Player %s (%d) suggested a veto" % (game.board.state.chancellor.name, game.board.state.chancellor.user.id))
-                await game.board.state.chancellor.send("You suggested a Veto to President %s" % game.board.state.president.name)
+                await game.board.state.chancellor.user.send("You suggested a Veto to President %s" % game.board.state.president.name)
                 await game.channel.send(
                                  "Chancellor %s suggested a Veto to President %s." % (
                                      game.board.state.chancellor.name, game.board.state.president.name))
-
-                await game.board.state.president.send("Chancellor %s suggested a Veto to you. Do you want to veto (discard) these cards?" % game.board.state.chancellor.name)
-                await game.board.state.president.send("Say sh?noveto to accept the suggestion. Say sh?veto to reject it. You have 30 seconds.")
-
+                await game.board.state.president.user.send("Chancellor %s suggested a Veto to you. Do you want to veto (discard) these cards?" % game.board.state.chancellor.name)
+                await game.board.state.president.user.send("Say sh?noveto to accept the suggestion. Say sh?veto to reject it. You have 30 seconds.")
                 # veto: if the policy can be passed
                 veto = None
                 def check_veto(msg):
-                    msg_content = msg.content.strip()
-                    if not msg_content.startsWith(PREFIX):
+                    if not msg.author==game.board.state.president.user:
                         return False
-
-                    cmd, *args = msg_content.split()
-                    cmd = cmd[len(PREFIX):].lower().strip()
-
+                    validation = validate_message(msg)
+                    if not validation:
+                        return False
+                    cmd, _ = validation
                     if cmd == "veto":
                         veto = False
                     elif cmd == "noveto":
                         veto = True
                     else:
                         return False
-
                     return True
-
-                await bot.wait_for_message(author=game.board.state.president, check=check_veto, timeout=30)
-
+                try:
+                    msg = await bot.wait_for('message', check=check_veto, timeout=game.timeout)
+                    cmd, _ = validate_message(msg)
+                    veto = cmd == "noveto"
+                except asyncio.TimeoutError:
+                    log.info('choose_policy timed out while waiting for veto, random decision made')
+                    veto = random.choice((True, False))
                 await choose_veto(bot, game, veto)
-
-
             else:
                 log.info("Player %s (%d) chose a %s policy" % (game.board.state.chancellor.name, game.board.state.chancellor.user.id, answer))
-                await game.board.state.chancellor.send("The policy %s will be enacted!" % answer)
+                await game.board.state.chancellor.user.send("The policy %s will be enacted!" % answer)
                 # remove policy from drawn cards and enact, discard the other card
                 for i in range(2):
                     if game.board.state.drawn_policies[i] == answer:
@@ -592,49 +603,41 @@ async def pass_two_policies(bot, game):
 
     policy_str = ""
     for i, p in enumerate(game.board.state.drawn_policies):
-        policy_str += ("[" + str(i) + "] " + p + "\n")
+        policy_str += ("[" + str(i+1) + "] " + p + "\n")
 
     veto = False
-    enacted = None
     def check_policies(msg):
-        msg_content = msg.content.strip()
-        if not msg_content.startsWith(PREFIX):
+        if not msg.author==game.board.state.chancellor.user:
             return False
-
-        cmd, *args = msg_content.split()
-        cmd = cmd[len(PREFIX):].lower().strip()
-
+        validation = validate_message(msg)
+        if not validation:
+            return False
+        cmd, arg = validation
         if cmd == "enact":
             try:
-                id = int(args[0])
+                id = int(arg)
                 if id > 0 and id <= len(game.board.state.drawn_policies):
-                    enacted = id
                     return True
-
             except Exception:
                 return False
         elif cmd == "veto":
             veto = True
         else:
             return False
-
         return True
 
     def check_policies_noveto(msg):
-        msg_content = msg.content.strip()
-        if not msg_content.startsWith(PREFIX):
+        if not msg.author==game.board.state.chancellor.user:
             return False
-
-        cmd, *args = msg_content.split()
-        cmd = cmd[len(PREFIX):].lower().strip()
-
+        validation = validate_message(msg)
+        if not validation:
+            return False
+        cmd, arg = validation
         if cmd == "enact":
             try:
-                id = int(args[0])
+                id = int(arg)
                 if id > 0 and id <= len(game.board.state.drawn_policies):
-                    enacted = id
                     return True
-
             except Exception:
                 return False
         else:
@@ -647,22 +650,34 @@ async def pass_two_policies(bot, game):
                          "President %s gave two policies to Chancellor %s." % (
                              game.board.state.president.name, game.board.state.chancellor.name))
 
-        await game.board.state.chancellor.send("President %s gave you the following 2 policies:\n%s\n Enact one of them using sh?enact <id>. You can also use your Veto power: sh?veto. You have 30 seconds." % (game.board.state.president.name, policy_str))
+        await game.board.state.chancellor.user.send("President %s gave you the following 2 policies:\n%s\n Enact one of them using sh?enact <id>. You can also use your Veto power: sh?veto. You have 30 seconds." % (game.board.state.president.name, policy_str))
 
-        await bot.wait_for_message(author=game.board.state.chancellor, check=check_policies, timeout=30)
-        await choose_policy(bot, game, "veto" if veto else game.board.state.drawn_policies[enacted] if enacted else random.choice(game.board.state.drawn_policies))
+        try:
+            msg = await bot.wait_for('message', check=check_policies, timeout=game.timeout)
+            cmd, arg = validate_message(msg)
+            if cmd == "veto":
+                enacted_policy = "veto"
+            else:
+                enacted_policy = game.board.state.drawn_policies[int(arg)-1]
+        except asyncio.TimeoutError:
+            log.info('pass_two_policies timed out - random policy enacted')
+            enacted_policy = game.board.state.drawn_policies[random.randrange(1,3)]
+        await choose_policy(bot, game, enacted_policy)
 
-    elif game.board.state.veto_refused:
-        await game.board.state.chancellor.send("President %s refused your Veto. Now you have to choose. Which one do you want to enact?" % game.board.state.president.name)
+    else:
+        if game.board.state.veto_refused:
+            await game.board.state.chancellor.user.send("President {} refused your Veto. Now you have to choose from the following policies:\n{}\nWhich one do you want to enact? Use sh?enact <id>".format(game.board.state.president.name, policy_str))
+        elif game.board.state.fascist_track < 5:
+            await game.board.state.chancellor.user.send("President {} gave you the following 2 policies:\n{}\nWhich one do you want to enact? Use sh?enact <id>".format(game.board.state.president.name, policy_str))
 
-        await bot.wait_for_message(author=game.board.state.chancellor, check=check_policies_noveto, timeout=30)
-        await choose_policy(bot, game, game.board.state.drawn_policies[enacted] if enacted else random.choice(game.board.state.drawn_policies))
-
-    elif game.board.state.fascist_track < 5:
-        await game.board.state.chancellor.send("President %s gave you the following 2 policies. Which one do you want to enact?" % game.board.state.president.name)
-
-        await bot.wait_for_message(author=game.board.state.chancellor, check=check_policies_noveto, timeout=30)
-        await choose_policy(bot, game, game.board.state.drawn_policies[enacted] if enacted else random.choice(game.board.state.drawn_policies))
+        try:
+            msg = await bot.wait_for('message', check=check_policies_noveto, timeout=game.timeout)
+            _, arg = validate_message(msg)
+            enacted = int(arg)
+        except asyncio.TimeoutError:
+            log.info('pass_two_policies timed out - random policy enacted')
+            enacted = random.randrange(1,3)
+        await choose_policy(bot, game, game.board.state.drawn_policies[enacted-1])
 
 
 async def enact_policy(bot, game, policy, anarchy):
@@ -730,11 +745,9 @@ async def enact_policy(bot, game, policy, anarchy):
 
 async def choose_veto(bot, game, veto):
     log.info('choose_veto called')
-    cid = game.channel.id
     # remember, veto is True if policy is accepted
     answer = "yesveto" if veto else "noveto"
     try:
-        game = games[cid]
         uid = game.board.state.president.user.id
         if answer == "yesveto":
             log.info("Player %s (%d) accepted the veto" % (game.board.state.president.name, uid))
@@ -777,7 +790,7 @@ async def action_policy(bot, game):
     log.info('action_policy called')
     topPolicies = ""
     # shuffle discard pile with rest if rest < 3
-    shuffle_policy_pile(bot, game)
+    await shuffle_policy_pile(bot, game)
     for i in range(3):
         topPolicies += game.board.policies[i] + "\n"
     await game.board.state.president.user.send(
@@ -787,46 +800,48 @@ async def action_policy(bot, game):
 
 async def action_kill(bot, game):
     log.info('action_kill called')
-    people_str = ""
+    btns = []
     for uid in game.playerlist:
         if uid != game.board.state.president.user.id and game.playerlist[uid].is_dead == False:
             name = game.playerlist[uid].name
-            people_str += ("[" + str(uid) + "] "+ name + "\n")
+            btns.append({'name': name, 'uid': uid})
 
     await game.board.state.president.user.send(game.board.print_board())
-    await game.board.state.president.user.send(people_str + '\n\nYou have to kill one person. You can discuss your decision with the others. Choose wisely!\nUse sh?kill <id> to kill. You have 30 seconds.')
-
-    killed_uid = None
+    await game.board.state.president.user.send(
+        "You have to kill one person. You can discuss your decision with the others. Choose wisely!\nUse sh?kill <id> to kill.\n{}\nYou have 30 seconds.".format(
+            "\n".join("[" + str(i+1) + "] " + p['name'] for i, p in enumerate(btns))
+            )
+    )
     def check_kill(msg):
-        msg_content = msg.content.strip()
-        if not msg_content.startsWith(PREFIX):
+        if not msg.author==game.board.state.president.user:
             return False
-
-        cmd, *args = msg_content.split()
-        cmd = cmd[len(PREFIX):].lower().strip()
-
+        validation = validate_message(msg)
+        if not validation:
+            return False
+        cmd, arg = validation
         if cmd == "kill":
             try:
-                id = int(args[0])
-                if id > 0 and id <= len(game.playerlist):
-                    killed_uid = id
+                id = int(arg)
+                if id > 0 and id <= len(btns):
                     return True
             except Exception:
                 return False
         else:
             return False
-
-        return True
-
-    await bot.wait_for_message(author=game.board.state.chancellor, check=check_kill, timeout=30)
-    await choose_kill(bot, game, killed_uid if killed_uid else random.choice(game.playerlist.keys()))
+    try:
+        msg = await bot.wait_for('message', check=check_kill, timeout=game.timeout)
+        cmd, arg = validate_message(msg)
+        killed_id = int(arg)
+    except asyncio.TimeoutError:
+        log.info('action_kill timed out - random victim chosen')
+        killed_id = random.choice([i for i, p in enumerate(btns)])
+    killed_uid = btns[killed_id-1]['uid']
+    await choose_kill(bot, game, killed_uid)
 
 
 async def choose_kill(bot, game, answer):
     log.info('choose_kill called')
-    cid = game.channel.id
     try:
-        game = games[cid]
         chosen = game.playerlist[answer]
         chosen.is_dead = True
         if game.player_sequence.index(chosen) <= game.board.state.player_counter:
@@ -851,28 +866,20 @@ async def choose_kill(bot, game, answer):
 
 async def action_choose(bot, game):
     log.info('action_choose called')
-    players_str = ""
-
-    for i, uid in enumerate(game.playerlist):
+    btns = []
+    for uid in game.playerlist:
         if uid != game.board.state.president.user.id and game.playerlist[uid].is_dead == False:
             name = game.playerlist[uid].name
-            players_str += ("[" + str(i) + "] " + name + "\n")
-
-    chosen_uid = None
-
+            btns.append({'name': name, 'uid': uid})
     def check_choose(msg):
-        msg_content = msg.content.strip()
-        if not msg_content.startsWith(PREFIX):
+        if not msg.author==game.board.state.president.user:
             return False
-
-        cmd, *args = msg_content.split()
-        cmd = cmd[len(PREFIX):].lower().strip()
-
+        validation = validate_message(msg)
+        cmd, arg = validation
         if cmd == "choose":
             try:
-                id = int(args[0])
-                if id > 0 and id <= len(game.playerlist):
-                    chosen_uid = id
+                id = int(arg)
+                if id > 0 and id <= len(btns):
                     return True
             except Exception:
                 return False
@@ -882,17 +889,25 @@ async def action_choose(bot, game):
         return True
 
     await game.board.state.president.user.send(game.board.print_board())
-    await game.board.state.president.user.send('You get to choose the next presidential candidate. Afterwards the order resumes back to normal. Choose wisely! Your choices are:\n{}\n You have 30 seconds. Use sh?choose <id>'.format(players_str))
+    await game.board.state.president.user.send('You get to choose the next presidential candidate. Afterwards the order resumes back to normal. Choose wisely! Your choices are:\n{}\n You have 30 seconds. Use sh?choose <id>'
+                                               .format(
+                                                   "\n".join("[" + str(i+1) + "]" + p['name'] for i, p in enumerate(btns))
+                                               )
+    )
 
-    await bot.wait_for_message(author=game.board.state.president, check=check_choose, timeout=30)
-    await choose_choose(bot, game, chosen_uid if chosen_uid else random.choice(game.playerlist.keys()))
-
+    try:
+        msg = await bot.wait_for('message', check=check_choose, timeout=game.timeout)
+        _, arg = validate_message(msg)
+        chosen_id = int(arg)
+    except asyncio.TimeoutError:
+        log.info('action_choose timed out - random president chosen')
+        chosen_id = random.choice([i for i in range(1, len(btns)+1)])
+    chosen_uid = btns[chosen_id-1]['uid']
+    await choose_choose(bot, game, chosen_uid)
 
 async def choose_choose(bot, game, answer):
     log.info('choose_choose called')
-    cid = game.channel.id
     try:
-        game = games[cid]
         chosen = game.playerlist[answer]
         game.board.state.chosen_president = chosen
         log.info(
@@ -907,26 +922,20 @@ async def choose_choose(bot, game, answer):
 
 async def action_inspect(bot, game):
     log.info('action_inspect called')
-    players_str = ""
+    btns = []
     for i, uid in enumerate(game.playerlist):
         if uid != game.board.state.president.user.id and game.playerlist[uid].is_dead == False:
             name = game.playerlist[uid].name
-            players_str += ("["+ str(i) +"] " + name + "\n")
-
-    inspect_uid = None
+            btns.append({'name': name, 'uid': uid})
     def check_inspect(msg):
-        msg_content = msg.content.strip()
-        if not msg_content.startsWith(PREFIX):
+        if not msg.author==game.board.state.president.user:
             return False
-
-        cmd, *args = msg_content.split()
-        cmd = cmd[len(PREFIX):].lower().strip()
-
+        validation = validate_message(msg)
+        cmd, arg = validation
         if cmd == "inspect":
             try:
-                id = int(args[0])
+                id = int(arg)
                 if id > 0 and id <= len(game.playerlist):
-                    inspect_uid = id
                     return True
             except Exception:
                 return False
@@ -935,19 +944,26 @@ async def action_inspect(bot, game):
 
         return True
 
-
     await game.board.state.president.user.send(game.board.print_board())
-    await game.board.state.president.user.send('You may see the party membership of one player. Which do you want to know? Choose wisely!\nYour choices are:{}\n\n You have 30 seconds. Use sh?inspect <id>.'.format(players_str))
-
-    await bot.wait_for_message(author=game.board.state.president, check=check_inspect, timeout=30)
-    await choose_inspect(bot, game, inspect_uid if inspect_uid else random.choice(game.playerlist.keys()))
+    await game.board.state.president.user.send('You may see the party membership of one player. Which do you want to know? Choose wisely!\nYour choices are:{}\n\n You have 30 seconds. Use sh?inspect <id>.'
+                                               .format(
+                                                   "\n".join("[" + str(i+1) + "]" + p['name'] for i, p in enumerate(btns))
+                                               )
+    )
+    try:
+       msg =  await bot.wait_for('message', check=check_inspect, timeout=game.timeout)
+       _, arg = validate_message(msg)
+       inspect_id = int(arg)
+    except asyncio.TimeoutError:
+        log.info('action_inspect timed out - random target chosen')
+        inspect_id = random.choice([i for i in range(1, len(btns)+1)])
+    inspect_uid = btns[inspect_id-1]['uid']
+    await choose_inspect(bot, game, inspect_uid)
 
 
 async def choose_inspect(bot, game, answer):
     log.info('choose_inspect called')
-    cid = game.channel.id
     try:
-        game = games[cid]
         chosen = game.playerlist[answer]
         log.info("Player %s (%d) inspects %s (%d)'s party membership: %s" % (
                 game.board.state.president.name, game.board.state.president.user.id, chosen.name, chosen.user.id,
@@ -1024,7 +1040,7 @@ async def end_game(bot, game, game_endcode):
     del games[game.channel.id]
 
 
-async def inform_players(bot, game, cid, player_number):
+async def inform_players(bot, game, player_number):
     log.info('inform_players called')
     await game.channel.send(
                      "Let's start the game with %d players!\n%s\nGo to your private chat and look at your secret role!" % (
@@ -1052,6 +1068,10 @@ def print_player_info(player_number):
         return "There are 5 Liberals, 3 Fascists and Hitler. Hitler doesn't know who the Fascists are."
     elif player_number == 10:
         return "There are 6 Liberals, 3 Fascists and Hitler. Hitler doesn't know who the Fascists are."
+    elif player_number == 3:
+        return "There is 1 Liberal, 1 Fascist and Hitler. Hitler doesn't know who the Fascist is. This is only for testing."
+    elif player_number == 4:
+        return "There is 2 Liberals, 1 Fascist and Hitler. Hitler doesn't know who the Fascist is. This is only for testing."
 
 
 async def inform_fascists(bot, game, player_number):
@@ -1123,3 +1143,15 @@ async def shuffle_policy_pile(bot, game):
         game.board.discards = []
         await game.channel.send(
                          "There were not enough cards left on the policy pile so I shuffled the rest with the discard pile!")
+
+def validate_message(msg):
+    """
+    Returns False if not a valid command. Otherwise return the command and the first argument.
+    """
+    msg_content = msg.content.strip()
+    if not msg_content.lower().startswith(PREFIX):
+        return False
+    cmd, *args = msg_content.split()
+    cmd = cmd[len(PREFIX):].lower().strip()
+    arg = args[0] if len(args) else None
+    return (cmd, arg)
